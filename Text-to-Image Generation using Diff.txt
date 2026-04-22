@@ -1,0 +1,101 @@
+Text-to-Image Generation using Diffusion & GAN Models
+
+##Overview
+
+This project focuses on generating images from text descriptions using deep learning techniques. It explores multiple approaches including diffusion models and conditional GANs (CGAN), and compares them with a pretrained Stable Diffusion model.
+
+---
+
+##Key Features
+
+* Text-to-image generation from natural language prompts
+* Diffusion model implemented from scratch
+* Conditional GAN (CGAN) for improved image structure
+* High-quality image generation using Stable Diffusion
+* Comparison of different approaches
+
+---
+
+##Approaches
+
+### Diffusion Model (From Scratch)
+
+* Implemented U-Net architecture
+* Used CLIP for text embeddings
+* Added noise scheduler and VAE
+
+Result:
+Produces noisy outputs due to limited training data and compute, but demonstrates the full pipeline.
+
+---
+
+### Conditional GAN (CGAN)
+
+* Generator: Noise + text embedding → image
+* Discriminator: Image + text → real/fake
+* DCGAN-style convolution architecture
+
+Result:
+Generates structured but low-resolution images, showing improvement over diffusion model.
+
+---
+
+###Stable Diffusion (Pretrained)
+
+* Used pretrained model for high-quality image generation
+
+Result:
+Generates realistic, high-resolution images from text prompts.
+
+---
+
+## Results Comparison
+
+| Model               | Output                 |
+| ------------------- | ---------------------- |
+| Diffusion (Scratch) | Noisy                  |
+| CGAN                | Blurry but structured  |
+| Stable Diffusion    | High-quality realistic |
+
+---
+
+## Tech Stack
+
+* Python
+* PyTorch
+* Transformers (Hugging Face)
+* Diffusers
+* Google Colab
+
+---
+
+## Project Structure
+
+```
+├── notebook.ipynb
+├── outputs/
+│   ├── noisy_output.png
+│   ├── cgan_output.png
+│   ├── stable_output.png
+└── README.md
+```
+
+---
+
+## Conclusion
+
+This project demonstrates that training text-to-image models from scratch is challenging due to limited data and compute. Pretrained models like Stable Diffusion provide significantly better results.
+
+---
+
+## Future Work
+* Train on larger datasets
+* Improve GAN architecture
+* Increase image resolution
+* Fine-tune Stable Diffusion
+
+---
+
+## Acknowledgment
+
+This project was developed for learning and understanding text-to-image generation using deep learning models.

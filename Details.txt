@@ -1,0 +1,190 @@
+Implementation Plan
+1. Setup Environment
+Install dependencies: torch, torchvision, transformers, diffusers, datasets, opencv-python, PIL, matplotlib, etc.
+Use Jupyter Notebook for training.
+2. Prepare Data
+Load Flickr8k dataset (captions & images).
+Preprocess images (resize, normalize) and tokenize captions.
+3. Build Stable Diffusion from Scratch
+Implement U-Net (backbone of diffusion model).
+Implement Scheduler (to control noise levels).
+Implement Text Encoder (using CLIP for text embeddings).
+Implement VAE (Variational Autoencoder) for decoding latent representations.
+4. Train the Model
+Use Flickr8k captions as text input.
+Train the model using denoising loss.
+Train with gradient accumulation to handle large models.
+5. Test Image Generation
+Use trained model to generate images from new captions.
+Save & visualize output images.
+Step-by-Step Code for Jupyter Notebook
+
+Let’s start implementing!
+
+Step 1: Install Dependencies
+
+Run this in a Jupyter Notebook cell:
+
+!pip install torch torchvision diffusers transformers datasets opencv-python pillow matplotlib
+Step 2: Load and Preprocess Flickr8k Dataset
+
+Since you've uploaded the dataset, let's load and process it.
+
+import os
+import pandas as pd
+import torch
+from PIL import Image
+from torchvision import transforms
+from datasets import load_dataset
+
+# Define paths
+IMAGE_DIR = "path_to_flickr8k_images"  # Update this with the actual image folder path
+CAPTION_FILE = "/mnt/data/Flickr8k.token.txt"
+
+# Load captions
+df = pd.read_csv(CAPTION_FILE, sep="\t", names=["image", "caption"])
+df["image"] = df["image"].apply(lambda x: x.split("#")[0])  # Remove caption index
+
+# Remove duplicates
+df = df.drop_duplicates(subset=["image"])
+
+# Load images & transform
+transform = transforms.Compose([
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),
+    transforms.Normalize([0.5], [0.5])  # Normalize to [-1, 1]
+])
+
+# Example loading an image
+image_path = os.path.join(IMAGE_DIR, df.iloc[0]["image"])
+image = Image.open(image_path).convert("RGB")
+image = transform(image)
+
+print(f"Loaded Image Shape: {image.shape}")
+Step 3: Implement U-Net (Core of Stable Diffusion)
+
+A simple U-Net architecture:
+
+import torch.nn as nn
+
+class UNet(nn.Module):
+    def __init__(self):
+        super(UNet, self).__init__()
+        
+        self.encoder = nn.Sequential(
+            nn.Conv2d(4, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU()
+        )
+        
+        self.middle = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU()
+        )
+        
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 4, kernel_size=3, stride=1, padding=1),
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.middle(x)
+        x = self.decoder(x)
+        return x
+
+# Initialize model
+unet = UNet()
+print(f"Model Summary: {unet}")
+Step 4: Implement Scheduler (Noise Control)
+class NoiseScheduler:
+    def __init__(self, timesteps=1000):
+        self.timesteps = timesteps
+        self.betas = torch.linspace(1e-4, 0.02, timesteps)
+        self.alphas = 1 - self.betas
+        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
+    
+    def add_noise(self, image, t):
+        noise = torch.randn_like(image)
+        return self.alphas_cumprod[t] * image + (1 - self.alphas_cumprod[t]) * noise
+
+# Example usage
+scheduler = NoiseScheduler()
+noisy_image = scheduler.add_noise(image, t=100)
+Step 5: Implement Text Encoder (CLIP for Text Embeddings)
+from transformers import CLIPTokenizer, CLIPTextModel
+
+tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+text_encoder = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+
+# Example tokenizing a caption
+caption = df.iloc[0]["caption"]
+inputs = tokenizer(caption, return_tensors="pt")
+text_features = text_encoder(**inputs).last_hidden_state
+print(f"Text Feature Shape: {text_features.shape}")
+Step 6: Implement Variational Autoencoder (VAE)
+class VAE(nn.Module):
+    def __init__(self, latent_dim=4):
+        super(VAE, self).__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, latent_dim, kernel_size=3, stride=2, padding=1)
+        )
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(latent_dim, 64, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.Tanh()
+        )
+
+    def forward(self, x):
+        latent = self.encoder(x)
+        reconstructed = self.decoder(latent)
+        return reconstructed, latent
+
+vae = VAE()
+Step 7: Training the Stable Diffusion Model
+optimizer = torch.optim.Adam(list(unet.parameters()) + list(vae.parameters()), lr=1e-4)
+
+for epoch in range(10):  # Training loop
+    for idx, row in df.iterrows():
+        image_path = os.path.join(IMAGE_DIR, row["image"])
+        image = Image.open(image_path).convert("RGB")
+        image = transform(image).unsqueeze(0)  # Add batch dimension
+
+        # Encode text
+        inputs = tokenizer(row["caption"], return_tensors="pt")
+        text_features = text_encoder(**inputs).last_hidden_state
+
+        # Encode image
+        reconstructed, latent = vae(image)
+
+        # Add noise
+        noisy_image = scheduler.add_noise(latent, t=100)
+
+        # Predict noise
+        predicted_noise = unet(noisy_image)
+
+        # Compute loss
+        loss = ((predicted_noise - noisy_image) ** 2).mean()
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+
+        print(f"Epoch [{epoch+1}], Image [{idx+1}/{len(df)}], Loss: {loss.item():.4f}")
+Step 8: Generate New Images
+def generate_image(prompt):
+    inputs = tokenizer(prompt, return_tensors="pt")
+    text_features = text_encoder(**inputs).last_hidden_state
+    noise = torch.randn((1, 4, 64, 64))
+    output = unet(noise)
+    generated_image = vae.decoder(output).detach().squeeze(0).permute(1, 2, 0)
+    return (generated_image + 1) / 2  # Scale back to [0,1]
+
+# Example
+generated_image = generate_image("A dog playing in the park")
+plt.imshow(generated_image)
+plt.show()
